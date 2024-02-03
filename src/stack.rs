@@ -21,7 +21,7 @@ impl<T> Stack<T> {
 
         // SAFETY: There is no other thread acccessing the node we are trying
         // to push. So it is safe to access and modify it via pointer.
-        // However, once we append it, it is no longer safe to do so.
+        // However, once we push the node, it is no longer safe to do so.
         unsafe {
             while let Err(top) = self.top.compare_exchange_weak((*node).next, node, Ordering::Relaxed, Ordering::Relaxed) {
                 (*node).next = top;
@@ -36,7 +36,7 @@ impl<T> Stack<T> {
             if top.is_null() { return None }
 
             // SAFETY: None of the popping threads will ever mutate a
-            // *non-exclusive* node through a pointer. So reading is safe.
+            // *non-exclusive* node through a pointer, so reading is safe.
             let next = unsafe { (*top).next };
 
             match self.top.compare_exchange_weak(top, next, Ordering::Relaxed, Ordering::Relaxed) {
@@ -45,12 +45,13 @@ impl<T> Stack<T> {
             }
         }
 
-        // SAFETY: The CAS loop has succeded, this means that this thread is the
-        // only one that popped the top node, and responsible for returning the
-        // value of the top node to the caller. However, there may stil be more
-        // than one reader to the top node through pointers, so it not safe to
-        // deallocate the top node, and that is a reclamation problem, we are
-        // reading the pointer and return the owned value to the caller.
+        // SAFETY: The CAS loop has succeeded, meaning, the current thread is
+        // the only one that popped the top node, and responsible for returning
+        // the value of the top node to the caller.
+        //
+        // However, there may still be more than one reader accessing the top
+        // node through pointers, so it is *not* safe to deallocate the top node,
+        // and that is a reclamation problem. So we will just leak.
         let node = unsafe { ptr::read(top) };
 
         Some(node.value)
